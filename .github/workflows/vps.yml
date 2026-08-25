@@ -9,18 +9,21 @@ jobs:
     timeout-minutes: 330
     steps:
       - uses: actions/checkout@v4
+      - name: Keep Alive
+        run: |
+          while true; do echo "keepalive $(date)"; sleep 300; done &
       - name: Fixed VPS
         run: |
           sudo apt update -y
           sudo apt install -y openssh-server
           echo 'root:wayne123' | sudo chpasswd
           sudo mkdir -p /var/run/sshd
-          sed -i 's/#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
-          sed -i 's/PermitRootLogin no/PermitRootLogin yes/' /etc/ssh/sshd_config
-          sed -i 's/#PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
-          sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
-          echo "PermitRootLogin yes" | sudo tee -a /etc/ssh/sshd_config
-          echo "PasswordAuthentication yes" | sudo tee -a /etc/ssh/sshd_config
+          sudo sed -i 's/#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/PermitRootLogin no/PermitRootLogin yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/#PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          sudo bash -c 'echo "PermitRootLogin yes" >> /etc/ssh/sshd_config'
+          sudo bash -c 'echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config'
           sudo /usr/sbin/sshd
           mkdir -p ~/storage
           ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=999 -p 443 -R0:localhost:22 rugnYA1g97i@a.pinggy.io
