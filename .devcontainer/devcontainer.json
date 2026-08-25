@@ -1,0 +1,11 @@
+{
+  "name": "VPS",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "forwardPorts": [3000],
+  "postCreateCommand": "npm install && npm start & bash ~/keepalive.sh &",
+  "customizations": {
+    "vscode": {
+      "extensions": []
+    }
+  }
+}
