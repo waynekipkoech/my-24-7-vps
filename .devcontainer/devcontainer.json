@@ -1,13 +1,7 @@
 {
-  "name": "VPS",
-  "build": {
-    "dockerfile": "Dockerfile"
-  },
-  "forwardPorts": [3000, 2222],
-  "postCreateCommand": "npm install && npm start & bash ~/keepalive.sh &",
-  "customizations": {
-    "vscode": {
-      "extensions": []
-    }
-  }
+  "name": "My VPS",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "forwardPorts": [3000],
+  "postCreateCommand": "sudo bash /workspaces/my-24-7-vps/setup-vps.sh",
+  "remoteUser": "root"
 }
