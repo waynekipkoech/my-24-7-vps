@@ -1,12 +1,12 @@
 #!/bin/bash
-# VPS Setup Script - runs automatically on codespace creation
+# VPS Setup Script - runs on codespace creation
+# IMPORTANT: Do NOT overwrite sshd_config - the sshd feature manages it
 set -e
 
 echo "========================================"
-echo "[1/8] Installing bore..."
+echo "[1/7] Installing bore..."
 echo "========================================"
 
-# Install bore if not present
 if ! command -v bore &> /dev/null; then
     curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-gnu.tar.gz | tar xz -C /usr/local/bin/
     echo "  bore installed: $(bore --version)"
@@ -16,47 +16,34 @@ fi
 
 echo ""
 echo "========================================"
-echo "[2/8] Configuring SSH..."
+echo "[2/7] Configuring SSH (non-breaking)..."
 echo "========================================"
 
 # Set root password
 echo "root:Root@12345" | chpasswd
 echo "  root password set"
 
-# Configure sshd for password auth
-cat > /etc/ssh/sshd_config_custom <<'SSHEOF'
-Port 22
-PermitRootLogin yes
-PasswordAuthentication yes
-ChallengeResponseAuthentication no
-UsePAM yes
-PrintMotd no
-AcceptEnv LANG LC_*
-Subsystem sftp /usr/lib/openssh/sftp-server
-SSHEOF
+# Enable root login + password auth WITHOUT overwriting the feature's config
+# The sshd feature sets up key auth for vscode user - we only ADD root access
+SSHD_CONF=/etc/ssh/sshd_config
 
-# Merge with existing config - ensure our settings override
-cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
-cat /etc/ssh/sshd_config_custom >> /etc/ssh/sshd_config
-# Ensure key settings are present
-sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
-sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+# Ensure these settings exist (add if missing, update if present)
+grep -q '^PermitRootLogin' $SSHD_CONF && sed -i 's/^PermitRootLogin.*/PermitRootLogin yes/' $SSHD_CONF || echo 'PermitRootLogin yes' >> $SSHD_CONF
+grep -q '^PasswordAuthentication' $SSHD_CONF && sed -i 's/^PasswordAuthentication.*/PasswordAuthentication yes/' $SSHD_CONF || echo 'PasswordAuthentication yes' >> $SSHD_CONF
 
-echo "  sshd configured"
-
-# Restart sshd
+# Restart sshd to apply
 pkill -f '/usr/sbin/sshd' 2>/dev/null || true
 sleep 1
 /usr/sbin/sshd
-echo "  sshd restarted"
+echo "  sshd restarted with root+password access"
 
 echo ""
 echo "========================================"
-echo "[3/8] Customizing shell prompt..."
+echo "[3/7] Customizing shell prompt..."
 echo "========================================"
 
-# Root bashrc - VPS style prompt
-cat > /root/.bashrc <<'EOF'
+# Root bashrc - VPS style red prompt
+cat > /root/.bashrc <<'PROMPTEOF'
 export PS1='\[\033[1;31m\]\u@\h\[\033[0m\]:\[\033[1;34m\]\w\[\033[0m\]\$ '
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 export TERM=xterm-256color
@@ -65,18 +52,18 @@ alias cls='clear'
 export MOTD_SHOWN=pwned
 unset CODESPACES
 unset VSCODE_GIT_IPC_HANDLE
-EOF
+PROMPTEOF
 
-echo "  root prompt set to: \u@\h:\w\$ "
+echo "  root prompt: \u@\h:\w\$ "
 
-# vscode user bashrc
-cat > /home/vscode/.bashrc <<'EOF'
+# Also customize vscode user prompt
+cat > /home/vscode/.bashrc <<'PROMPTEOF'
 export PS1='\[\033[1;32m\]\u@\h\[\033[1;34m\]:\w\$ \[\033[0m\]'
 export TERM=xterm-256color
 alias ll='ls -la'
 alias cls='clear'
 export MOTD_SHOWN=pwned
-EOF
+PROMPTEOF
 
 # Remove codespace branding
 rm -f /etc/update-motd.d/*codespace* 2>/dev/null || true
@@ -88,12 +75,11 @@ echo "  branding removed"
 
 echo ""
 echo "========================================"
-echo "[4/8] Setting up Express server..."
+echo "[4/7] Setting up Express server..."
 echo "========================================"
 
 cd /workspaces/my-24-7-vps
 
-# Create server.js if not exists or update it
 cat > server.js <<'EOF'
 const express = require("express");
 const app = express();
@@ -108,11 +94,11 @@ EOF
 
 npm install --silent 2>&1 | tail -3
 nohup node server.js > /tmp/server.log 2>&1 &
-echo "  Express server started on :3000"
+echo "  Express on :3000"
 
 echo ""
 echo "========================================"
-echo "[5/8] Deploying keepalive..."
+echo "[5/7] Deploying keepalive..."
 echo "========================================"
 
 cat > /home/vscode/keepalive.sh <<'EOF'
@@ -126,11 +112,11 @@ done
 EOF
 chmod +x /home/vscode/keepalive.sh
 nohup bash /home/vscode/keepalive.sh > /dev/null 2>&1 &
-echo "  keepalive running (every 4min)"
+echo "  keepalive running (4min interval)"
 
 echo ""
 echo "========================================"
-echo "[6/8] Deploying bore watchdog..."
+echo "[6/7] Deploying bore tunnel..."
 echo "========================================"
 
 cat > /home/vscode/bore_watchdog.sh <<'EOF'
@@ -142,16 +128,16 @@ while true; do
     nohup bore local 22 --to bore.pub > /tmp/bore_output.log 2>&1 &
     BORE_PID=$!
     echo "[$(date)] Bore started PID=$BORE_PID" >> /tmp/bore_watchdog.log
-    sleep 8
+    sleep 10
     PORT=$(grep -oP 'tcp://[\d.]+:\K\d+' /tmp/bore_output.log | tail -1)
     if [ -n "$PORT" ]; then
         echo "$PORT" > /tmp/bore_port.txt
-        echo "[$(date)] Tunnel active on port $PORT" >> /tmp/bore_watchdog.log
+        echo "[$(date)] Tunnel on port $PORT" >> /tmp/bore_watchdog.log
     fi
     while kill -0 $BORE_PID 2>/dev/null; do
         sleep 30
     done
-    echo "[$(date)] Bore died, restarting in 10s..." >> /tmp/bore_watchdog.log
+    echo "[$(date)] Bore died, restarting..." >> /tmp/bore_watchdog.log
     sleep 10
 done
 EOF
@@ -161,39 +147,27 @@ echo "  bore watchdog started"
 
 echo ""
 echo "========================================"
-echo "[7/8] Waiting for bore tunnel..."
+echo "[7/7] Waiting for tunnel + verification..."
 echo "========================================"
 
-sleep 12
+sleep 15
 BORE_PORT=$(cat /tmp/bore_port.txt 2>/dev/null)
-BORE_LOG=$(cat /tmp/bore_output.log 2>/dev/null)
 
 if [ -n "$BORE_PORT" ]; then
-    echo "  BORE TUNNEL ACTIVE ON PORT: $BORE_PORT"
-    echo "  ===================================="
-    echo "  Host: 159.223.110.159"
-    echo "  Port: $BORE_PORT"
-    echo "  User: root"
-    echo "  Pass: Root@12345"
-    echo "  ===================================="
+    echo ""
+    echo "  >>> BORE TUNNEL ACTIVE ON PORT: $BORE_PORT"
+    echo "  >>> Host: 159.223.110.159"
+    echo "  >>> User: root"
+    echo "  >>> Pass: Root@12345"
 else
-    echo "  WARNING: bore port not detected yet"
-    echo "  bore output: $BORE_LOG"
-    echo "  The watchdog will keep trying. Check: cat /tmp/bore_output.log"
+    echo "  bore output: $(cat /tmp/bore_output.log 2>/dev/null)"
+    echo "  Port not detected yet - watchdog will keep retrying"
 fi
 
 echo ""
-echo "========================================"
-echo "[8/8] Final verification..."
-echo "========================================"
-
 echo "  sshd:  $(pgrep -c sshd) processes"
 echo "  bore:  $(pgrep -c bore) processes"
-echo "  keepalive: $(pgrep -c -f keepalive.sh) processes"
-echo "  express: $(pgrep -c -f 'node server') processes"
-echo "  health: $(curl -s localhost:3000/health)"
-
+echo "  keep:  $(pgrep -c -f keepalive.sh) processes"
+echo "  web:   $(curl -s localhost:3000/health)"
 echo ""
-echo "========================================"
-echo "VPS SETUP COMPLETE!"
-echo "========================================"
+echo "SETUP COMPLETE"
