@@ -1,7 +1,14 @@
 {
   "name": "My VPS",
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
-  "forwardPorts": [3000],
+  "forwardPorts": [
+    3000
+  ],
+  "features": {
+    "ghcr.io/devcontainers/features/sshd:1": {
+      "version": "latest"
+    }
+  },
   "postCreateCommand": "sudo bash /workspaces/my-24-7-vps/setup-vps.sh",
   "remoteUser": "root"
 }
