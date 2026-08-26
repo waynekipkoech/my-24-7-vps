@@ -9,6 +9,5 @@
       "version": "latest"
     }
   },
-  "postCreateCommand": "sudo bash /workspaces/my-24-7-vps/setup-vps.sh",
-  "remoteUser": "root"
+  "postCreateCommand": "sudo bash /workspaces/my-24-7-vps/setup-vps.sh"
 }
